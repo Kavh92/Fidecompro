@@ -13,16 +13,9 @@ public final class Producto extends Entidad {
     public final int existencias;
     public final boolean activo;
 
-    public Producto(
-            int id,
-            String codigo,
-            String nombre,
-            Categoria categoria,
-            BigDecimal precio,
-            int existencias) {
-
+    public Producto(int id, String codigo, String nombre,
+                    Categoria categoria, BigDecimal precio, int existencias) {
         super(id);
-
         this.codigo = codigo;
         this.nombre = nombre;
         this.categoria = categoria;
@@ -31,18 +24,9 @@ public final class Producto extends Entidad {
         this.activo = true;
     }
 
-    /**
-     * Crea una nueva versión del producto con las unidades recibidas.
-     */
     public Producto conEntrada(int cantidad) {
-        return new Producto(
-                id,
-                codigo,
-                nombre,
-                categoria,
-                precio,
-                Math.addExact(existencias, cantidad)
-        );
+        int nuevasExistencias = Math.addExact(existencias, cantidad);
+        return new Producto(id, codigo, nombre, categoria, precio, nuevasExistencias);
     }
 
     @Override

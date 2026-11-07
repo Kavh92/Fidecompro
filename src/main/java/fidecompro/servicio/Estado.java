@@ -15,36 +15,22 @@ public final class Estado implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    public final Map<Integer, Cliente> clientes =
-            new LinkedHashMap<>();
-
-    public final Map<Integer, Categoria> categorias =
-            new LinkedHashMap<>();
-
-    public final Map<Integer, Producto> productos =
-            new LinkedHashMap<>();
-
-    public final List<MovimientoInventario> movimientos =
-            new ArrayList<>();
-
-    public final Map<String, Usuario> usuarios =
-            new LinkedHashMap<>();
+    public final Map<Integer, Cliente> clientes = new LinkedHashMap<>();
+    public final Map<Integer, Categoria> categorias = new LinkedHashMap<>();
+    public final Map<Integer, Producto> productos = new LinkedHashMap<>();
+    public final List<MovimientoInventario> movimientos = new ArrayList<>();
+    public final Map<String, Usuario> usuarios = new LinkedHashMap<>();
 
     public int siguiente = 1;
 
-    /**
-     * Prepara una copia antes de intentar guardar una modificación.
-     */
     public Estado copia() {
         Estado copia = new Estado();
-
         copia.clientes.putAll(clientes);
         copia.categorias.putAll(categorias);
         copia.productos.putAll(productos);
         copia.movimientos.addAll(movimientos);
         copia.usuarios.putAll(usuarios);
         copia.siguiente = siguiente;
-
         return copia;
     }
 }

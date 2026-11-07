@@ -2,179 +2,314 @@ package fidecompro.cliente;
 
 import fidecompro.red.Conexion;
 import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.GridLayout;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
+import java.io.IOException;
+import java.net.ConnectException;
 import java.util.List;
-import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
-import javax.swing.JComponent;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JPasswordField;
-import javax.swing.JScrollPane;
-import javax.swing.JTable;
-import javax.swing.JTextField;
-import javax.swing.ListSelectionModel;
-import javax.swing.SwingUtilities;
-import javax.swing.SwingWorker;
-import javax.swing.UIManager;
+import javax.net.ssl.SSLHandshakeException;
+import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 
-public final class ClienteApp extends JPanel {
+public final class ClienteApp extends JFrame {
 
     private final Conexion conexion = new Conexion(
             System.getProperty("fidecompro.host", "localhost"),
-            Integer.getInteger("fidecompro.puerto", 5050)
-    );
+            Integer.getInteger("fidecompro.puerto", 5050));
 
+    private final JPanel contenido = new JPanel(new BorderLayout(12, 12));
+    private final JLabel estado = new JLabel(" ");
     private String token = "";
     private String usuario = "";
     private boolean ocupado;
 
-    private final Color azul = new Color(30, 54, 78);
-    private final Color fondo = new Color(240, 245, 248);
-
-    private final JLabel estado = new JLabel(" ");
-
-    private JPanel cuerpo;
-    private JFrame ventana;
-
     public ClienteApp() {
-        setPreferredSize(new Dimension(1100, 720));
-        ingreso();
-    }
+        super("Fidecompro");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(1000, 650);
+        setLocationRelativeTo(null);
 
-    private void pantalla(String titulo) {
-        removeAll();
-        setLayout(new BorderLayout());
-
-        String identificacionUsuario = usuario.isEmpty()
-                ? ""
-                : "Usuario: " + usuario;
-
-        JLabel encabezado = new JLabel(
-                "  Fidecompro     |     "
-                + titulo
-                + "                         "
-                + identificacionUsuario
-        );
-
-        encabezado.setOpaque(true);
-        encabezado.setBackground(azul);
-        encabezado.setForeground(Color.WHITE);
-
-        encabezado.setFont(
-                new Font("SansSerif", Font.BOLD, 19)
-        );
-
-        encabezado.setPreferredSize(
-                new Dimension(0, 65)
-        );
-
-        add(encabezado, BorderLayout.NORTH);
-
-        cuerpo = new JPanel(
-                new BorderLayout(12, 12)
-        );
-
-        cuerpo.setBorder(
-                new EmptyBorder(22, 25, 22, 25)
-        );
-
-        cuerpo.setBackground(fondo);
-
-        add(cuerpo, BorderLayout.CENTER);
-
-        estado.setText(" ");
-
-        estado.setBorder(
-                new EmptyBorder(8, 25, 12, 15)
-        );
-
+        contenido.setBorder(new EmptyBorder(15, 15, 15, 15));
+        add(contenido, BorderLayout.CENTER);
+        estado.setBorder(new EmptyBorder(5, 15, 10, 15));
         add(estado, BorderLayout.SOUTH);
 
-        revalidate();
-        repaint();
+        mostrarIngreso();
     }
 
-    private JPanel botones() {
-        return new JPanel(
-                new FlowLayout(FlowLayout.LEFT, 10, 8)
-        );
+    private JPanel pantalla(String titulo) {
+        contenido.removeAll();
+        getRootPane().setDefaultButton(null);
+        estado.setText(" ");
+
+        JLabel encabezado = new JLabel(titulo);
+        encabezado.setFont(encabezado.getFont().deriveFont(21f));
+        contenido.add(encabezado, BorderLayout.NORTH);
+
+        JPanel cuerpo = new JPanel(new BorderLayout(10, 10));
+        contenido.add(cuerpo, BorderLayout.CENTER);
+        return cuerpo;
     }
 
-    private JButton boton(
-            JPanel panel,
-            String texto,
-            Runnable tarea) {
+    private void actualizarPantalla() {
+        contenido.revalidate();
+        contenido.repaint();
+    }
 
-        JButton boton = new JButton(texto);
+    private void mostrarIngreso() {
+        JPanel cuerpo = pantalla("Fidecompro | Iniciar sesión");
+        JTextField nombre = new JTextField("caja01", 20);
+        JPasswordField clave = new JPasswordField(20);
 
-        boton.setBackground(azul);
-        boton.setForeground(Color.WHITE);
+        JButton ingresar = boton("Ingresar", () -> {
+            String nombreIngresado = nombre.getText().trim();
+            String claveIngresada = new String(clave.getPassword());
+            clave.setText("");
 
-        boton.addActionListener(evento -> {
-            if (!ocupado) {
-                tarea.run();
+            solicitar("LOGIN", "", respuesta -> {
+                token = respuesta.get(0).get(0);
+                usuario = respuesta.get(0).get(1);
+                mostrarMenu();
+            }, nombreIngresado, claveIngresada);
+        });
+
+        JPanel caja = new JPanel(new BorderLayout(8, 8));
+        caja.add(formulario(
+                new String[]{"Usuario", "Contraseña"}, nombre, clave),
+                BorderLayout.CENTER);
+        caja.add(acciones(ingresar), BorderLayout.SOUTH);
+        cuerpo.add(caja, BorderLayout.NORTH);
+        getRootPane().setDefaultButton(ingresar);
+        actualizarPantalla();
+    }
+
+    private void mostrarMenu() {
+        JPanel cuerpo = pantalla("Menú principal | " + usuario);
+        JPanel opciones = new JPanel(new GridLayout(0, 2, 10, 10));
+
+        opciones.add(boton("Clientes", this::mostrarClientes));
+        opciones.add(boton("Productos e inventario", this::mostrarProductos));
+        opciones.add(boton("Movimientos de inventario", this::mostrarMovimientos));
+
+        JButton facturacion = new JButton("Facturación | Pendiente");
+        facturacion.setEnabled(false);
+        opciones.add(facturacion);
+
+        opciones.add(boton("Cerrar sesión", () ->
+                solicitar("LOGOUT", token, respuesta -> {
+                    token = "";
+                    usuario = "";
+                    mostrarIngreso();
+                })));
+
+        cuerpo.add(opciones, BorderLayout.NORTH);
+        actualizarPantalla();
+    }
+
+    private void mostrarClientes() {
+        JPanel cuerpo = pantalla("Clientes");
+        JTextField identificacion = new JTextField();
+        JTextField nombre = new JTextField();
+        JTextField telefono = new JTextField();
+        JTextField correo = new JTextField();
+        JTextField direccion = new JTextField();
+        JTextField busqueda = new JTextField(18);
+        JCheckBox activo = new JCheckBox("Activo", true);
+
+        DefaultTableModel modelo = modeloTabla(
+                "ID", "Identificación", "Nombre", "Teléfono",
+                "Correo", "Dirección", "Activo");
+        JTable tabla = tabla(modelo);
+
+        Runnable limpiar = () -> {
+            tabla.clearSelection();
+            identificacion.setText("");
+            nombre.setText("");
+            telefono.setText("");
+            correo.setText("");
+            direccion.setText("");
+            activo.setSelected(true);
+        };
+
+        Runnable cargar = () -> solicitar("CLIENTES", token, filas -> {
+            limpiar.run();
+            llenarTabla(modelo, filas);
+            estado.setText(filas.isEmpty()
+                    ? "No se encontraron clientes."
+                    : "Clientes encontrados: " + filas.size());
+        }, busqueda.getText());
+
+        tabla.getSelectionModel().addListSelectionListener(evento -> {
+            int fila = filaSeleccionada(tabla);
+            if (evento.getValueIsAdjusting() || fila < 0) {
+                return;
+            }
+
+            identificacion.setText(valor(modelo, fila, 1));
+            nombre.setText(valor(modelo, fila, 2));
+            telefono.setText(valor(modelo, fila, 3));
+            correo.setText(valor(modelo, fila, 4));
+            direccion.setText(valor(modelo, fila, 5));
+            activo.setSelected(Boolean.parseBoolean(valor(modelo, fila, 6)));
+        });
+
+        Consumer<String> guardar = id -> solicitar(
+                "GUARDAR_CLIENTE", token, respuesta -> cargar.run(),
+                id, identificacion.getText(), nombre.getText(),
+                telefono.getText(), correo.getText(), direccion.getText(),
+                String.valueOf(activo.isSelected()));
+
+        JButton editar = boton("Guardar edición", () -> {
+            int fila = filaSeleccionada(tabla);
+            if (fila < 0) {
+                aviso("Seleccioná un cliente en la tabla.");
+                return;
+            }
+            guardar.accept(valor(modelo, fila, 0));
+        });
+
+        JPanel arriba = new JPanel(new BorderLayout(8, 8));
+        arriba.add(formulario(
+                new String[]{"Identificación *", "Nombre *", "Teléfono",
+                    "Correo", "Dirección", "Estado"},
+                identificacion, nombre, telefono, correo, direccion, activo),
+                BorderLayout.CENTER);
+
+        arriba.add(acciones(
+                boton("Guardar nuevo", () -> guardar.accept("0")),
+                editar,
+                boton("Limpiar", limpiar),
+                new JLabel("Buscar:"),
+                busqueda,
+                boton("Buscar", cargar),
+                boton("Volver", this::mostrarMenu)), BorderLayout.SOUTH);
+
+        cuerpo.add(arriba, BorderLayout.NORTH);
+        cuerpo.add(new JScrollPane(tabla), BorderLayout.CENTER);
+        actualizarPantalla();
+        cargar.run();
+    }
+
+    private void mostrarProductos() {
+        JPanel cuerpo = pantalla("Productos e inventario");
+        JTextField codigo = new JTextField();
+        JTextField nombre = new JTextField();
+        JTextField precio = new JTextField();
+        JTextField busqueda = new JTextField(14);
+        JComboBox<CategoriaOpcion> categorias = new JComboBox<>();
+
+        DefaultTableModel modelo = modeloTabla(
+                "ID", "Código", "Nombre", "Categoría", "Precio", "Existencias");
+        JTable tabla = tabla(modelo);
+
+        Runnable cargarProductos = () -> solicitar("PRODUCTOS", token, filas -> {
+            llenarTabla(modelo, filas);
+            estado.setText(filas.isEmpty()
+                    ? "No se encontraron productos."
+                    : "Productos encontrados: " + filas.size());
+        }, busqueda.getText());
+
+        Consumer<String> cargarCategorias = idSeleccionado ->
+                solicitar("CATEGORIAS", token, filas -> {
+                    categorias.removeAllItems();
+                    for (List<String> fila : filas) {
+                        CategoriaOpcion opcion =
+                                new CategoriaOpcion(fila.get(0), fila.get(1));
+                        categorias.addItem(opcion);
+
+                        if (opcion.id().equals(idSeleccionado)) {
+                            categorias.setSelectedItem(opcion);
+                        }
+                    }
+                    cargarProductos.run();
+                });
+
+        JButton nuevaCategoria = boton("Nueva categoría", () -> {
+            JTextField nombreCategoria = new JTextField(20);
+            JTextField detalle = new JTextField(20);
+
+            JPanel campos = formulario(
+                    new String[]{"Nombre *", "Detalle"}, nombreCategoria, detalle);
+
+            if (confirmar("Nueva categoría", campos)) {
+                solicitar("CREAR_CATEGORIA", token,
+                        respuesta -> cargarCategorias.accept(respuesta.get(0).get(0)),
+                        nombreCategoria.getText(), detalle.getText());
             }
         });
 
-        panel.add(boton);
+        JButton guardarProducto = boton("Guardar producto", () -> {
+            CategoriaOpcion categoria = (CategoriaOpcion) categorias.getSelectedItem();
+            if (categoria == null) {
+                aviso("Registrá o seleccioná una categoría.");
+                return;
+            }
 
-        return boton;
+            solicitar("CREAR_PRODUCTO", token, respuesta -> {
+                codigo.setText("");
+                nombre.setText("");
+                precio.setText("");
+                cargarProductos.run();
+            }, codigo.getText(), nombre.getText(), categoria.id(), precio.getText());
+        });
+
+        JButton registrarEntrada = boton("Registrar entrada", () -> {
+            int fila = filaSeleccionada(tabla);
+            if (fila < 0) {
+                aviso("Seleccioná un producto en la tabla.");
+                return;
+            }
+
+            String id = valor(modelo, fila, 0);
+            JTextField cantidad = new JTextField(15);
+            JTextField motivo = new JTextField(25);
+
+            JPanel campos = formulario(
+                    new String[]{"Producto", "Cantidad *", "Motivo *"},
+                    new JLabel(valor(modelo, fila, 2)), cantidad, motivo);
+
+            if (confirmar("Entrada de inventario", campos)) {
+                solicitar("ENTRADA", token, respuesta -> cargarProductos.run(),
+                        id, cantidad.getText(), motivo.getText());
+            }
+        });
+
+        JPanel arriba = new JPanel(new BorderLayout(8, 8));
+        arriba.add(formulario(
+                new String[]{"Código *", "Nombre *", "Categoría *", "Precio en colones *"},
+                codigo, nombre, categorias, precio), BorderLayout.CENTER);
+
+        arriba.add(acciones(
+                nuevaCategoria, guardarProducto, registrarEntrada,
+                new JLabel("Buscar:"), busqueda, boton("Buscar", cargarProductos),
+                boton("Volver", this::mostrarMenu)), BorderLayout.SOUTH);
+
+        cuerpo.add(arriba, BorderLayout.NORTH);
+        cuerpo.add(new JScrollPane(tabla), BorderLayout.CENTER);
+        actualizarPantalla();
+        cargarCategorias.accept("");
     }
 
-    private JPanel formulario(
-            String[] etiquetas,
-            JComponent[] campos) {
+    private void mostrarMovimientos() {
+        JPanel cuerpo = pantalla("Movimientos de inventario");
+        DefaultTableModel modelo = modeloTabla(
+                "ID", "Código del producto", "Cantidad", "Usuario", "Fecha", "Motivo");
 
-        JPanel formulario = new JPanel(
-                new GridLayout(0, 2, 16, 8)
-        );
+        cuerpo.add(new JScrollPane(tabla(modelo)), BorderLayout.CENTER);
+        cuerpo.add(acciones(boton("Volver", this::mostrarMenu)), BorderLayout.SOUTH);
+        actualizarPantalla();
 
-        formulario.setOpaque(false);
-
-        for (int i = 0; i < etiquetas.length; i++) {
-            JPanel celda = new JPanel(
-                    new BorderLayout(4, 4)
-            );
-
-            celda.setOpaque(false);
-
-            celda.add(
-                    new JLabel(etiquetas[i]),
-                    BorderLayout.NORTH
-            );
-
-            celda.add(
-                    campos[i],
-                    BorderLayout.CENTER
-            );
-
-            formulario.add(celda);
-        }
-
-        return formulario;
+        solicitar("MOVIMIENTOS", token, filas -> {
+            llenarTabla(modelo, filas);
+            estado.setText("Movimientos encontrados: " + filas.size());
+        });
     }
 
-    /**
-     * Ejecuta la comunicación fuera del hilo de eventos de Swing.
-     */
-    private <T> void trabajar(
-            Callable<T> tarea,
-            Consumer<T> exito) {
-
+    private void solicitar(String comando, String sesion,
+                           Consumer<List<List<String>>> alCompletar,
+                           String... campos) {
         if (ocupado) {
             return;
         }
@@ -182,866 +317,119 @@ public final class ClienteApp extends JPanel {
         ocupado = true;
         estado.setText("Procesando...");
 
-        if (ventana != null) {
-            ventana.getGlassPane().setVisible(true);
-
-            ventana.getGlassPane().setCursor(
-                    Cursor.getPredefinedCursor(
-                            Cursor.WAIT_CURSOR
-                    )
-            );
-        }
-
-        new SwingWorker<T, Void>() {
-
+        new SwingWorker<List<List<String>>, Void>() {
             @Override
-            protected T doInBackground() throws Exception {
-                return tarea.call();
+            protected List<List<String>> doInBackground() throws IOException {
+                return conexion.pedir(comando, sesion, campos);
             }
 
             @Override
             protected void done() {
                 ocupado = false;
 
-                if (ventana != null) {
-                    ventana.getGlassPane().setVisible(false);
-                }
-
                 try {
-                    T resultado = get();
-
+                    List<List<String>> respuesta = get();
                     estado.setText("Operación completada.");
+                    alCompletar.accept(respuesta);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    aviso("La operación fue interrumpida.");
+                } catch (ExecutionException ex) {
+                    Throwable causa = ex.getCause();
 
-                    exito.accept(resultado);
-
-                } catch (Exception e) {
-                    Throwable causa = e.getCause() == null
-                            ? e
-                            : e.getCause();
-
-                    String mensaje = causa.getMessage();
-
-                    if (causa instanceof java.net.ConnectException) {
-                        mensaje = "No hay conexión con el servidor. "
-                                + "Inícielo y vuelva a intentar.";
+                    if (causa instanceof ConnectException) {
+                        aviso("No se pudo conectar. Revisá que el servidor esté abierto.");
+                    } else if (causa instanceof SSLHandshakeException) {
+                        aviso("Falló la conexión TLS. Revisá el certificado y el truststore.");
+                    } else {
+                        aviso(causa.getMessage());
                     }
-
-                    estado.setText(mensaje);
-
-                    JOptionPane.showMessageDialog(
-                            ClienteApp.this,
-                            mensaje,
-                            "Revise los datos o la conexión",
-                            JOptionPane.WARNING_MESSAGE
-                    );
                 }
             }
         }.execute();
     }
 
-    private void ingreso() {
-        pantalla("Ingreso al sistema");
+    private JButton boton(String texto, Runnable accion) {
+        JButton boton = new JButton(texto);
+        boton.addActionListener(evento -> {
+            if (!ocupado) {
+                accion.run();
+            }
+        });
+        return boton;
+    }
 
-        JTextField nombre = new JTextField("caja01");
-        JPasswordField clave = new JPasswordField();
-
-        JPanel datos = formulario(
-                new String[]{
-                    "Usuario",
-                    "Contraseña"
-                },
-                new JComponent[]{
-                    nombre,
-                    clave
-                }
-        );
-
-        JPanel caja = new JPanel(
-                new BorderLayout(10, 20)
-        );
-
-        caja.setBorder(
-                new EmptyBorder(100, 220, 150, 220)
-        );
-
-        caja.setOpaque(false);
-        caja.add(datos, BorderLayout.NORTH);
-
-        JPanel acciones = botones();
-
-        JButton entrar = boton(
-                acciones,
-                "Ingresar",
-                () -> {
-                    String nombreIngresado = nombre.getText();
-                    String claveIngresada =
-                            new String(clave.getPassword());
-
-                    clave.setText("");
-
-                    trabajar(
-                            () -> conexion.pedir(
-                                    "LOGIN",
-                                    "",
-                                    nombreIngresado,
-                                    claveIngresada
-                            ),
-                            resultado -> {
-                                token = resultado.get(0).get(0);
-                                usuario = resultado.get(0).get(1);
-
-                                menu();
-                            }
-                    );
-                }
-        );
-
-        caja.add(acciones, BorderLayout.CENTER);
-
-        cuerpo.add(caja);
-
-        if (getRootPane() != null) {
-            getRootPane().setDefaultButton(entrar);
+    private JPanel acciones(JComponent... componentes) {
+        JPanel panel = new JPanel();
+        for (JComponent componente : componentes) {
+            panel.add(componente);
         }
-
-        revalidate();
+        return panel;
     }
 
-    private void menu() {
-        pantalla("Menú principal");
-
-        JPanel opciones = new JPanel(
-                new GridLayout(3, 2, 20, 20)
-        );
-
-        opciones.setOpaque(false);
-
-        boton(
-                opciones,
-                "Clientes",
-                this::clientes
-        );
-
-        boton(
-                opciones,
-                "Productos e inventario",
-                this::productos
-        );
-
-        JButton venta = boton(
-                opciones,
-                "Nueva factura | Próxima etapa",
-                () -> {
-                }
-        );
-
-        venta.setEnabled(false);
-
-        JButton consulta = boton(
-                opciones,
-                "Consulta de facturas | Próxima etapa",
-                () -> {
-                }
-        );
-
-        consulta.setEnabled(false);
-
-        boton(
-                opciones,
-                "Movimientos de inventario",
-                this::movimientos
-        );
-
-        boton(
-                opciones,
-                "Cerrar sesión",
-                () -> salir(false)
-        );
-
-        cuerpo.add(
-                new JLabel(
-                        "Seleccione una opción. "
-                        + "Facturación pendiente para la siguiente entrega."
-                ),
-                BorderLayout.NORTH
-        );
-
-        cuerpo.add(opciones);
-
-        revalidate();
+    private JPanel formulario(String[] etiquetas, JComponent... campos) {
+        JPanel panel = new JPanel(new GridLayout(0, 2, 8, 8));
+        for (int i = 0; i < etiquetas.length; i++) {
+            JLabel etiqueta = new JLabel(etiquetas[i]);
+            etiqueta.setLabelFor(campos[i]);
+            panel.add(etiqueta);
+            panel.add(campos[i]);
+        }
+        return panel;
     }
 
-    private void salir(boolean cerrar) {
-        trabajar(
-                () -> conexion.pedir("LOGOUT", token),
-                resultado -> {
-                    token = "";
-                    usuario = "";
-
-                    if (cerrar && ventana != null) {
-                        ventana.dispose();
-                    } else {
-                        ingreso();
-                    }
-                }
-        );
-    }
-
-    private DefaultTableModel modelo(String... nombres) {
-        return new DefaultTableModel(nombres, 0) {
-
+    private DefaultTableModel modeloTabla(String... columnas) {
+        return new DefaultTableModel(columnas, 0) {
             @Override
-            public boolean isCellEditable(
-                    int fila,
-                    int columna) {
-
+            public boolean isCellEditable(int fila, int columna) {
                 return false;
             }
         };
     }
 
-    private JScrollPane desplazar(JTable tabla) {
-        JScrollPane panel = new JScrollPane(tabla);
-
-        panel.setColumnHeaderView(
-                tabla.getTableHeader()
-        );
-
-        return panel;
-    }
-
     private JTable tabla(DefaultTableModel modelo) {
         JTable tabla = new JTable(modelo);
-
-        tabla.setRowHeight(27);
-
-        tabla.setSelectionMode(
-                ListSelectionModel.SINGLE_SELECTION
-        );
-
+        tabla.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         tabla.setAutoCreateRowSorter(true);
-        tabla.getTableHeader().setReorderingAllowed(false);
-
         return tabla;
     }
 
-    private void clientes() {
-        pantalla("Registro de clientes");
-
-        JTextField identificacion = new JTextField();
-        JTextField nombre = new JTextField();
-        JTextField telefono = new JTextField();
-        JTextField correo = new JTextField();
-        JTextField direccion = new JTextField();
-        JTextField buscar = new JTextField();
-
-        JComboBox<String> activo = new JComboBox<>(
-                new String[]{"Activo", "Inactivo"}
-        );
-
-        JPanel arriba = new JPanel(
-                new BorderLayout(10, 10)
-        );
-
-        arriba.setOpaque(false);
-
-        arriba.add(
-                formulario(
-                        new String[]{
-                            "Identificación *",
-                            "Nombre completo *",
-                            "Teléfono",
-                            "Correo",
-                            "Dirección",
-                            "Estado",
-                            "Buscar por identificación o nombre"
-                        },
-                        new JComponent[]{
-                            identificacion,
-                            nombre,
-                            telefono,
-                            correo,
-                            direccion,
-                            activo,
-                            buscar
-                        }
-                ),
-                BorderLayout.CENTER
-        );
-
-        DefaultTableModel modelo = modelo(
-                "ID",
-                "Identificación",
-                "Nombre",
-                "Teléfono",
-                "Correo",
-                "Dirección",
-                "Activo"
-        );
-
-        JTable tabla = tabla(modelo);
-
-        int[] seleccionado = {0};
-
-        Runnable limpiar = () -> {
-            seleccionado[0] = 0;
-
-            identificacion.setText("");
-            nombre.setText("");
-            telefono.setText("");
-            correo.setText("");
-            direccion.setText("");
-
-            activo.setSelectedIndex(0);
-
-            tabla.clearSelection();
-        };
-
-        Runnable cargar = () -> {
-            String consulta = buscar.getText();
-
-            trabajar(
-                    () -> conexion.pedir(
-                            "CLIENTES",
-                            token,
-                            consulta
-                    ),
-                    resultado -> {
-                        modelo.setRowCount(0);
-
-                        for (List<String> datos : resultado) {
-                            Object[] fila = datos
-                                    .subList(0, 7)
-                                    .toArray();
-
-                            fila[6] = Boolean.parseBoolean(
-                                    datos.get(6)
-                            ) ? "Activo" : "Inactivo";
-
-                            modelo.addRow(fila);
-                        }
-
-                        if (resultado.isEmpty()) {
-                            estado.setText(
-                                    "No se encontraron clientes."
-                            );
-                        }
-                    }
-            );
-        };
-
-        tabla.getSelectionModel().addListSelectionListener(
-                evento -> {
-                    if (evento.getValueIsAdjusting()
-                            || tabla.getSelectedRow() < 0) {
-
-                        return;
-                    }
-
-                    int fila = tabla.convertRowIndexToModel(
-                            tabla.getSelectedRow()
-                    );
-
-                    seleccionado[0] = Integer.parseInt(
-                            modelo.getValueAt(fila, 0).toString()
-                    );
-
-                    identificacion.setText(
-                            modelo.getValueAt(fila, 1).toString()
-                    );
-
-                    nombre.setText(
-                            modelo.getValueAt(fila, 2).toString()
-                    );
-
-                    telefono.setText(
-                            modelo.getValueAt(fila, 3).toString()
-                    );
-
-                    correo.setText(
-                            modelo.getValueAt(fila, 4).toString()
-                    );
-
-                    direccion.setText(
-                            modelo.getValueAt(fila, 5).toString()
-                    );
-
-                    activo.setSelectedIndex(
-                            modelo.getValueAt(fila, 6)
-                                    .equals("Activo") ? 0 : 1
-                    );
-                }
-        );
-
-        JPanel acciones = botones();
-
-        boton(
-                acciones,
-                "Guardar nuevo",
-                () -> guardarCliente(
-                        0,
-                        identificacion,
-                        nombre,
-                        telefono,
-                        correo,
-                        direccion,
-                        activo,
-                        () -> {
-                            limpiar.run();
-                            cargar.run();
-                        }
-                )
-        );
-
-        boton(
-                acciones,
-                "Editar seleccionado",
-                () -> {
-                    if (seleccionado[0] == 0) {
-                        aviso(
-                                "Seleccione un cliente en la tabla."
-                        );
-
-                        return;
-                    }
-
-                    guardarCliente(
-                            seleccionado[0],
-                            identificacion,
-                            nombre,
-                            telefono,
-                            correo,
-                            direccion,
-                            activo,
-                            () -> {
-                                limpiar.run();
-                                cargar.run();
-                            }
-                    );
-                }
-        );
-
-        boton(acciones, "Buscar", cargar);
-        boton(acciones, "Limpiar", limpiar);
-        boton(acciones, "Volver", this::menu);
-
-        arriba.add(acciones, BorderLayout.SOUTH);
-
-        cuerpo.add(arriba, BorderLayout.NORTH);
-        cuerpo.add(desplazar(tabla));
-
-        revalidate();
-
-        cargar.run();
+    private void llenarTabla(DefaultTableModel modelo, List<List<String>> filas) {
+        modelo.setRowCount(0);
+        for (List<String> fila : filas) {
+            modelo.addRow(fila.subList(0, modelo.getColumnCount()).toArray());
+        }
     }
 
-    private void guardarCliente(
-            int seleccionado,
-            JTextField identificacion,
-            JTextField nombre,
-            JTextField telefono,
-            JTextField correo,
-            JTextField direccion,
-            JComboBox<String> activo,
-            Runnable luego) {
-
-        String[] parametros = {
-            String.valueOf(seleccionado),
-            identificacion.getText(),
-            nombre.getText(),
-            telefono.getText(),
-            correo.getText(),
-            direccion.getText(),
-            String.valueOf(activo.getSelectedIndex() == 0)
-        };
-
-        trabajar(
-                () -> conexion.pedir(
-                        "GUARDAR_CLIENTE",
-                        token,
-                        parametros
-                ),
-                resultado -> luego.run()
-        );
+    private int filaSeleccionada(JTable tabla) {
+        int fila = tabla.getSelectedRow();
+        return fila < 0 ? -1 : tabla.convertRowIndexToModel(fila);
     }
 
-    private record Opcion(String id, String nombre) {
+    private String valor(DefaultTableModel modelo, int fila, int columna) {
+        return modelo.getValueAt(fila, columna).toString();
+    }
 
+    private boolean confirmar(String titulo, JPanel campos) {
+        return JOptionPane.showConfirmDialog(
+                this, campos, titulo, JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION;
+    }
+
+    private void aviso(String mensaje) {
+        estado.setText(mensaje);
+        JOptionPane.showMessageDialog(this, mensaje, "Fidecompro",
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private record CategoriaOpcion(String id, String nombre) {
         @Override
         public String toString() {
             return nombre;
         }
     }
 
-    private void productos() {
-        pantalla("Productos e inventario");
-
-        JTextField codigo = new JTextField();
-        JTextField nombre = new JTextField();
-        JTextField precio = new JTextField();
-        JTextField buscar = new JTextField();
-
-        JComboBox<Opcion> categorias = new JComboBox<>();
-
-        JPanel arriba = new JPanel(
-                new BorderLayout(10, 10)
-        );
-
-        arriba.setOpaque(false);
-
-        arriba.add(
-                formulario(
-                        new String[]{
-                            "Código *",
-                            "Nombre *",
-                            "Categoría *",
-                            "Precio unitario en colones *",
-                            "Buscar por código o nombre"
-                        },
-                        new JComponent[]{
-                            codigo,
-                            nombre,
-                            categorias,
-                            precio,
-                            buscar
-                        }
-                ),
-                BorderLayout.CENTER
-        );
-
-        DefaultTableModel modelo = modelo(
-                "ID",
-                "Código",
-                "Nombre",
-                "Categoría",
-                "Precio",
-                "Existencias"
-        );
-
-        JTable tabla = tabla(modelo);
-
-        Runnable cargar = () -> {
-            String consulta = buscar.getText();
-
-            trabajar(
-                    () -> conexion.pedir(
-                            "PRODUCTOS",
-                            token,
-                            consulta
-                    ),
-                    resultado -> {
-                        modelo.setRowCount(0);
-
-                        for (List<String> fila : resultado) {
-                            modelo.addRow(
-                                    fila.subList(0, 6).toArray()
-                            );
-                        }
-
-                        if (resultado.isEmpty()) {
-                            estado.setText(
-                                    "No se encontraron productos. "
-                                    + "Los nuevos inician con cero existencias."
-                            );
-                        }
-                    }
-            );
-        };
-
-        Consumer<String> cargarCategorias = seleccion -> trabajar(
-                () -> conexion.pedir("CATEGORIAS", token),
-                resultado -> {
-                    categorias.removeAllItems();
-
-                    for (List<String> fila : resultado) {
-                        Opcion opcion = new Opcion(
-                                fila.get(0),
-                                fila.get(1)
-                        );
-
-                        categorias.addItem(opcion);
-
-                        if (opcion.id().equals(seleccion)) {
-                            categorias.setSelectedItem(opcion);
-                        }
-                    }
-
-                    cargar.run();
-                }
-        );
-
-        JPanel acciones = botones();
-
-        boton(
-                acciones,
-                "Guardar producto",
-                () -> {
-                    Opcion categoria = (Opcion)
-                            categorias.getSelectedItem();
-
-                    if (categoria == null) {
-                        aviso(
-                                "Registre una categoría primero."
-                        );
-
-                        return;
-                    }
-
-                    String codigoIngresado = codigo.getText();
-                    String nombreIngresado = nombre.getText();
-                    String precioIngresado = precio.getText();
-
-                    trabajar(
-                            () -> conexion.pedir(
-                                    "CREAR_PRODUCTO",
-                                    token,
-                                    codigoIngresado,
-                                    nombreIngresado,
-                                    categoria.id(),
-                                    precioIngresado
-                            ),
-                            resultado -> {
-                                codigo.setText("");
-                                nombre.setText("");
-                                precio.setText("");
-
-                                cargar.run();
-                            }
-                    );
-                }
-        );
-
-        boton(
-                acciones,
-                "Nueva categoría",
-                () -> {
-                    JTextField nombreCategoria = new JTextField();
-                    JTextField descripcion = new JTextField();
-
-                    JPanel formularioCategoria = formulario(
-                            new String[]{
-                                "Nombre *",
-                                "Descripción"
-                            },
-                            new JComponent[]{
-                                nombreCategoria,
-                                descripcion
-                            }
-                    );
-
-                    int respuesta = JOptionPane.showConfirmDialog(
-                            this,
-                            formularioCategoria,
-                            "Nueva categoría",
-                            JOptionPane.OK_CANCEL_OPTION
-                    );
-
-                    if (respuesta == JOptionPane.OK_OPTION) {
-                        String nombreIngresado =
-                                nombreCategoria.getText();
-
-                        String descripcionIngresada =
-                                descripcion.getText();
-
-                        trabajar(
-                                () -> conexion.pedir(
-                                        "CREAR_CATEGORIA",
-                                        token,
-                                        nombreIngresado,
-                                        descripcionIngresada
-                                ),
-                                resultado ->
-                                        cargarCategorias.accept(
-                                                resultado.get(0).get(0)
-                                        )
-                        );
-                    }
-                }
-        );
-
-        boton(
-                acciones,
-                "Registrar entrada",
-                () -> {
-                    int seleccion = tabla.getSelectedRow();
-
-                    if (seleccion < 0) {
-                        aviso(
-                                "Seleccione un producto."
-                        );
-
-                        return;
-                    }
-
-                    int fila = tabla.convertRowIndexToModel(
-                            seleccion
-                    );
-
-                    String productoId = modelo
-                            .getValueAt(fila, 0)
-                            .toString();
-
-                    JTextField cantidad = new JTextField();
-                    JTextField motivo = new JTextField();
-
-                    JPanel formularioEntrada = formulario(
-                            new String[]{
-                                "Producto",
-                                "Existencias actuales",
-                                "Cantidad recibida *",
-                                "Motivo *"
-                            },
-                            new JComponent[]{
-                                new JLabel(
-                                        modelo.getValueAt(fila, 2)
-                                                .toString()
-                                ),
-                                new JLabel(
-                                        modelo.getValueAt(fila, 5)
-                                                .toString()
-                                ),
-                                cantidad,
-                                motivo
-                            }
-                    );
-
-                    int respuesta = JOptionPane.showConfirmDialog(
-                            this,
-                            formularioEntrada,
-                            "Entrada de inventario",
-                            JOptionPane.OK_CANCEL_OPTION
-                    );
-
-                    if (respuesta == JOptionPane.OK_OPTION) {
-                        String cantidadIngresada =
-                                cantidad.getText();
-
-                        String motivoIngresado =
-                                motivo.getText();
-
-                        trabajar(
-                                () -> conexion.pedir(
-                                        "ENTRADA",
-                                        token,
-                                        productoId,
-                                        cantidadIngresada,
-                                        motivoIngresado
-                                ),
-                                resultado -> cargar.run()
-                        );
-                    }
-                }
-        );
-
-        boton(acciones, "Buscar", cargar);
-        boton(acciones, "Volver", this::menu);
-
-        arriba.add(acciones, BorderLayout.SOUTH);
-
-        cuerpo.add(arriba, BorderLayout.NORTH);
-        cuerpo.add(desplazar(tabla));
-
-        revalidate();
-
-        cargarCategorias.accept("");
-    }
-
-    private void movimientos() {
-        pantalla("Movimientos de inventario");
-
-        DefaultTableModel modelo = modelo(
-                "ID",
-                "Código producto",
-                "Cantidad",
-                "Usuario",
-                "Fecha",
-                "Motivo"
-        );
-
-        cuerpo.add(
-                desplazar(tabla(modelo))
-        );
-
-        JPanel acciones = botones();
-
-        boton(
-                acciones,
-                "Volver",
-                this::menu
-        );
-
-        cuerpo.add(
-                acciones,
-                BorderLayout.SOUTH
-        );
-
-        revalidate();
-
-        trabajar(
-                () -> conexion.pedir(
-                        "MOVIMIENTOS",
-                        token
-                ),
-                resultado -> {
-                    for (List<String> fila : resultado) {
-                        modelo.addRow(fila.toArray());
-                    }
-                }
-        );
-    }
-
-    private void aviso(String mensaje) {
-        JOptionPane.showMessageDialog(
-                this,
-                mensaje,
-                "Fidecompro",
-                JOptionPane.INFORMATION_MESSAGE
-        );
-    }
-
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            try {
-                UIManager.setLookAndFeel(
-                        UIManager.getCrossPlatformLookAndFeelClassName()
-                );
-            } catch (Exception ignored) {
-            }
-
-            ClienteApp aplicacion = new ClienteApp();
-
-            JFrame ventana = new JFrame(
-                    "Fidecompro | Inventario y facturación | Avance 2"
-            );
-
-            aplicacion.ventana = ventana;
-
-            ventana.setContentPane(aplicacion);
-            ventana.setMinimumSize(new Dimension(980, 650));
-            ventana.pack();
-            ventana.setLocationRelativeTo(null);
-
-            ventana.setDefaultCloseOperation(
-                    JFrame.DO_NOTHING_ON_CLOSE
-            );
-
-            ventana.addWindowListener(new WindowAdapter() {
-
-                @Override
-                public void windowClosing(WindowEvent evento) {
-                    if (aplicacion.ocupado) {
-                        return;
-                    }
-
-                    if (aplicacion.token.isEmpty()) {
-                        ventana.dispose();
-                    } else {
-                        aplicacion.salir(true);
-                    }
-                }
-            });
-
-            ventana.setVisible(true);
-        });
+        SwingUtilities.invokeLater(() -> new ClienteApp().setVisible(true));
     }
 }
