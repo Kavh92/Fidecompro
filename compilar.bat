@@ -1,7 +1,14 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-cd /d "%~dp0"
+cd /d "%~dp0" || exit /b 1
+
+where javac >nul 2>&1
+if errorlevel 1 (
+    echo Agregue el bin del JDK 17 o superior al PATH.
+    pause
+    exit /b 1
+)
 
 if not exist build mkdir build
 if not exist build\classes mkdir build\classes
