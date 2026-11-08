@@ -14,50 +14,30 @@ public final class Claves {
 
     public static String nuevaSal() {
         byte[] bytes = new byte[16];
-
         new SecureRandom().nextBytes(bytes);
-
         return Base64.getEncoder().encodeToString(bytes);
     }
 
     public static String hash(String clave, String sal) {
-        PBEKeySpec especificacion = new PBEKeySpec(
-                clave.toCharArray(),
-                Base64.getDecoder().decode(sal),
-                120000,
-                256
-        );
+        byte[] bytesSal = Base64.getDecoder().decode(sal);
+        PBEKeySpec especificacion =
+                new PBEKeySpec(clave.toCharArray(), bytesSal, 120_000, 256);
 
         try {
-            byte[] resultado = SecretKeyFactory
-                    .getInstance("PBKDF2WithHmacSHA256")
-                    .generateSecret(especificacion)
-                    .getEncoded();
-
+            SecretKeyFactory fabrica =
+                    SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            byte[] resultado = fabrica.generateSecret(especificacion).getEncoded();
             return Base64.getEncoder().encodeToString(resultado);
-
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException(
-                    "No se pudo derivar la clave.",
-                    e
-            );
-
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("No se pudo derivar la clave.", ex);
         } finally {
             especificacion.clearPassword();
         }
     }
 
-    public static boolean coincide(
-            String clave,
-            String sal,
-            String esperado) {
-
-        byte[] calculado = Base64.getDecoder().decode(
-                hash(clave, sal)
-        );
-
-        byte[] almacenado = Base64.getDecoder().decode(esperado);
-
-        return MessageDigest.isEqual(calculado, almacenado);
+    public static boolean coincide(String clave, String sal, String esperado) {
+        byte[] obtenido = Base64.getDecoder().decode(hash(clave, sal));
+        byte[] guardado = Base64.getDecoder().decode(esperado);
+        return MessageDigest.isEqual(obtenido, guardado);
     }
 }

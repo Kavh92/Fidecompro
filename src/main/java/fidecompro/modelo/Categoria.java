@@ -10,7 +10,6 @@ public final class Categoria extends Entidad {
 
     public Categoria(int id, String nombre, String detalle) {
         super(id);
-
         this.nombre = nombre;
         this.detalle = detalle;
         this.activo = true;

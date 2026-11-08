@@ -1,0 +1,8 @@
+/build/
+/target/
+/certs/
+/datos/
+/nbproject/private/
+*.class
+*.p12
+*.ser

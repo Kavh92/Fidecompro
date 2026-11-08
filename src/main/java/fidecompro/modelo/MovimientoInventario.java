@@ -12,15 +12,9 @@ public final class MovimientoInventario extends Entidad {
     public final String motivo;
     public final LocalDateTime fecha;
 
-    public MovimientoInventario(
-            int id,
-            int productoId,
-            int cantidad,
-            String usuario,
-            String motivo) {
-
+    public MovimientoInventario(int id, int productoId, int cantidad,
+                                String usuario, String motivo) {
         super(id);
-
         this.productoId = productoId;
         this.cantidad = cantidad;
         this.usuario = usuario;

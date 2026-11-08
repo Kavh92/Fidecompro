@@ -11,17 +11,10 @@ public final class Cliente extends Entidad {
     public final String direccion;
     public final boolean activo;
 
-    public Cliente(
-            int id,
-            String identificacion,
-            String nombre,
-            String telefono,
-            String correo,
-            String direccion,
-            boolean activo) {
-
+    public Cliente(int id, String identificacion, String nombre,
+                   String telefono, String correo, String direccion,
+                   boolean activo) {
         super(id);
-
         this.identificacion = identificacion;
         this.nombre = nombre;
         this.telefono = telefono;

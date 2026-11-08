@@ -11,7 +11,6 @@ public final class Usuario extends Entidad {
 
     public Usuario(int id, String nombre, String hash, String sal) {
         super(id);
-
         this.nombre = nombre;
         this.hash = hash;
         this.sal = sal;

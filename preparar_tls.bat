@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-cd /d "%~dp0"
+cd /d "%~dp0" || exit /b 1
 
 if exist certs\truststore.p12 if exist certs\servidor.p12 exit /b 0
 

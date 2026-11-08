@@ -8,10 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-/**
- * Persistencia provisional del avance 2.
- * La integración con JDBC corresponde a la siguiente etapa.
- */
 public class RepositorioDatos {
 
     private final Path archivo;
@@ -20,55 +16,34 @@ public class RepositorioDatos {
         this.archivo = archivo.toAbsolutePath();
     }
 
-    public Estado cargar()
-            throws IOException, ClassNotFoundException {
-
+    public Estado cargar() throws IOException, ClassNotFoundException {
         if (!Files.exists(archivo)) {
             return new Estado();
         }
 
-        try (ObjectInputStream entrada = new ObjectInputStream(
-                Files.newInputStream(archivo))) {
-
-            entrada.setObjectInputFilter(
-                    ObjectInputFilter.Config.createFilter(
-                            "maxdepth=30;"
-                            + "maxrefs=200000;"
-                            + "maxbytes=20000000;"
-                            + "fidecompro.modelo.*;"
-                            + "fidecompro.servicio.Estado;"
-                            + "java.base/*;"
-                            + "!*"
-                    )
-            );
-
+        try (ObjectInputStream entrada =
+                     new ObjectInputStream(Files.newInputStream(archivo))) {
+            String filtro = "maxdepth=30;maxrefs=200000;maxbytes=20000000;"
+                    + "fidecompro.modelo.*;fidecompro.servicio.Estado;java.base/*;!*";
+            entrada.setObjectInputFilter(ObjectInputFilter.Config.createFilter(filtro));
             return (Estado) entrada.readObject();
         }
     }
 
     public void guardar(Estado estado) throws IOException {
-        Files.createDirectories(archivo.getParent());
-
-        Path temporal = Files.createTempFile(
-                archivo.getParent(),
-                "fidecompro-",
-                ".tmp"
-        );
+        Path carpeta = archivo.getParent();
+        Files.createDirectories(carpeta);
+        Path temporal = Files.createTempFile(carpeta, "fidecompro-", ".tmp");
 
         try {
-            try (ObjectOutputStream salida = new ObjectOutputStream(
-                    Files.newOutputStream(temporal))) {
-
+            try (ObjectOutputStream salida =
+                         new ObjectOutputStream(Files.newOutputStream(temporal))) {
                 salida.writeObject(estado);
             }
 
-            Files.move(
-                    temporal,
-                    archivo,
+            Files.move(temporal, archivo,
                     StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
-
+                    StandardCopyOption.REPLACE_EXISTING);
         } finally {
             Files.deleteIfExists(temporal);
         }
